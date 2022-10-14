@@ -51,7 +51,7 @@ import io.micrometer.observation.ObservationRegistry;
 @AutoConfiguration
 @ConditionalOnClass(PulsarTemplate.class)
 @EnableConfigurationProperties(PulsarProperties.class)
-@Import({ PulsarAnnotationDrivenConfiguration.class })
+@Import({ PulsarAnnotationDrivenConfiguration.class, ObjectToKeySharedPolicyConverter.class })
 public class PulsarAutoConfiguration {
 
 	private final PulsarProperties properties;

@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import org.apache.pulsar.client.api.CompressionType;
 import org.apache.pulsar.client.api.ConsumerCryptoFailureAction;
 import org.apache.pulsar.client.api.HashingScheme;
+import org.apache.pulsar.client.api.KeySharedPolicy;
 import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.ProducerAccessMode;
 import org.apache.pulsar.client.api.ProducerCryptoFailureAction;
@@ -65,6 +66,16 @@ public class PulsarProperties {
 	private final Template template = new Template();
 
 	private final Admin admin = new Admin();
+
+	public KeySharedPolicy getKeySharedPolicy() {
+		return keySharedPolicy;
+	}
+
+	public void setKeySharedPolicy(KeySharedPolicy keySharedPolicy) {
+		this.keySharedPolicy = keySharedPolicy;
+	}
+
+	private KeySharedPolicy keySharedPolicy;
 
 	public Consumer getConsumer() {
 		return this.consumer;

@@ -233,6 +233,16 @@ class PulsarAutoConfigurationTests {
 							.containsEntry("authParams", "{\"password\":\"topsecret\",\"userId\":\"username\"}")));
 		}
 
+		@Test
+		void test() {
+			contextRunner.withPropertyValues(
+					"spring.pulsar.KeySharedPolicy.foo={\"test\": \"test\"}")
+				.run((context -> {
+					PulsarProperties pulsarProperties = context.getBean(PulsarProperties.class);
+					assertThat(pulsarProperties.getKeySharedPolicy()).isNotNull();
+				}));
+		}
+
 	}
 
 	@Nested

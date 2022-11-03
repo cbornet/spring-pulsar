@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.DeadLetterPolicy;
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
@@ -58,7 +59,6 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.pulsar.annotation.EnablePulsar;
 import org.springframework.pulsar.annotation.PulsarListener;
 import org.springframework.pulsar.config.ConcurrentPulsarListenerContainerFactory;
-import org.springframework.pulsar.config.PulsarClientConfiguration;
 import org.springframework.pulsar.config.PulsarClientFactoryBean;
 import org.springframework.pulsar.config.PulsarListenerContainerFactory;
 import org.springframework.pulsar.config.PulsarListenerEndpointRegistry;
@@ -106,13 +106,13 @@ public class PulsarListenerTests implements PulsarTestContainerSupport {
 		}
 
 		@Bean
-		public PulsarClientFactoryBean pulsarClientFactoryBean(PulsarClientConfiguration pulsarClientConfiguration) {
-			return new PulsarClientFactoryBean(pulsarClientConfiguration);
+		public PulsarClientFactoryBean pulsarClientFactoryBean(ClientBuilder clientBuilder) {
+			return new PulsarClientFactoryBean(clientBuilder);
 		}
 
 		@Bean
-		public PulsarClientConfiguration pulsarClientConfiguration() {
-			return new PulsarClientConfiguration(Map.of("serviceUrl", PulsarTestContainerSupport.getPulsarBrokerUrl()));
+		public ClientBuilder pulsarClientBuilder() {
+			return PulsarClient.builder().serviceUrl(PulsarTestContainerSupport.getPulsarBrokerUrl());
 		}
 
 		@Bean

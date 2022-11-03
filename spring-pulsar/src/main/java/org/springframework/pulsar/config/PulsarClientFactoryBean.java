@@ -17,6 +17,7 @@
 package org.springframework.pulsar.config;
 
 import org.apache.commons.logging.LogFactory;
+import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.PulsarClient;
 
 import org.springframework.beans.factory.FactoryBean;
@@ -29,15 +30,16 @@ import org.springframework.lang.Nullable;
  *
  * @author Soby Chacko
  * @author Chris Bono
+ * @author Christophe Bornet
  */
 public class PulsarClientFactoryBean extends AbstractFactoryBean<PulsarClient> {
 
 	private final LogAccessor logger = new LogAccessor(LogFactory.getLog(this.getClass()));
 
-	private final PulsarClientConfiguration pulsarClientConfiguration;
+	private final ClientBuilder clientBuilder;
 
-	public PulsarClientFactoryBean(PulsarClientConfiguration pulsarClientConfiguration) {
-		this.pulsarClientConfiguration = pulsarClientConfiguration;
+	public PulsarClientFactoryBean(ClientBuilder clientBuilder) {
+		this.clientBuilder = clientBuilder;
 	}
 
 	@Override
@@ -47,7 +49,7 @@ public class PulsarClientFactoryBean extends AbstractFactoryBean<PulsarClient> {
 
 	@Override
 	protected PulsarClient createInstance() throws Exception {
-		return PulsarClient.builder().loadConf(this.pulsarClientConfiguration.getConfigs()).build();
+		return clientBuilder.build();
 	}
 
 	@Override

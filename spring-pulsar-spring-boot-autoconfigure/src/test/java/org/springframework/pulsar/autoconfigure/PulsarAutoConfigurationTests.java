@@ -21,8 +21,12 @@ import static org.mockito.Mockito.mock;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.pulsar.client.api.ClientBuilder;
+import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.interceptor.ProducerInterceptor;
+import org.apache.pulsar.client.impl.auth.AuthenticationBasic;
+import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -38,7 +42,6 @@ import org.springframework.pulsar.annotation.EnablePulsar;
 import org.springframework.pulsar.annotation.PulsarBootstrapConfiguration;
 import org.springframework.pulsar.annotation.PulsarListenerAnnotationBeanPostProcessor;
 import org.springframework.pulsar.config.ConcurrentPulsarListenerContainerFactory;
-import org.springframework.pulsar.config.PulsarClientConfiguration;
 import org.springframework.pulsar.config.PulsarClientFactoryBean;
 import org.springframework.pulsar.config.PulsarListenerContainerFactory;
 import org.springframework.pulsar.config.PulsarListenerEndpointRegistry;
@@ -93,7 +96,7 @@ class PulsarAutoConfigurationTests {
 	@Test
 	void defaultBeansAreAutoConfigured() {
 		this.contextRunner
-				.run((context) -> assertThat(context).hasNotFailed().hasSingleBean(PulsarClientConfiguration.class)
+				.run((context) -> assertThat(context).hasNotFailed().hasSingleBean(ClientBuilder.class)
 						.hasSingleBean(PulsarClientFactoryBean.class).hasSingleBean(PulsarProducerFactory.class)
 						.hasSingleBean(PulsarTemplate.class).hasSingleBean(PulsarConsumerFactory.class)
 						.hasSingleBean(ConcurrentPulsarListenerContainerFactory.class)
@@ -102,20 +105,17 @@ class PulsarAutoConfigurationTests {
 	}
 
 	@Test
-	void customPulsarClientConfigurationIsRespected() {
-		PulsarClientConfiguration clientConfig = new PulsarClientConfiguration(
-				new PulsarProperties().buildClientProperties());
+	void customPulsarClientBuilderIsRespected() {
+		ClientBuilder clientBuilder = PulsarClient.builder();
 		this.contextRunner
-				.withBean("customPulsarClientConfiguration", PulsarClientConfiguration.class, () -> clientConfig)
-				.run((context) -> assertThat(context).hasNotFailed().getBean(PulsarClientConfiguration.class)
-						.isSameAs(clientConfig));
+				.withBean("customPulsarClientBuilder", ClientBuilder.class, () -> clientBuilder)
+				.run((context) -> assertThat(context).hasNotFailed().getBean(ClientBuilder.class)
+						.isSameAs(clientBuilder));
 	}
 
 	@Test
-	void customPulsarClientFactoryBeanIsRespected() {
-		PulsarClientConfiguration clientConfig = new PulsarClientConfiguration(
-				new PulsarProperties().buildClientProperties());
-		PulsarClientFactoryBean clientFactoryBean = new PulsarClientFactoryBean(clientConfig);
+	void customPulsarClientFactoryBeanIsRespected() throws Exception {
+		PulsarClientFactoryBean clientFactoryBean = new PulsarClientFactoryBean(new PulsarProperties().buildClientBuilder());
 		this.contextRunner
 				.withBean("customPulsarClientFactoryBean", PulsarClientFactoryBean.class, () -> clientFactoryBean)
 				.run((context) -> assertThat(context)
@@ -227,10 +227,11 @@ class PulsarAutoConfigurationTests {
 					"spring.pulsar.client.auth-plugin-class-name=org.apache.pulsar.client.impl.auth.AuthenticationBasic",
 					"spring.pulsar.client.authentication.userId=username",
 					"spring.pulsar.client.authentication.password=topsecret")
-					.run((context -> assertThat(context).hasNotFailed().getBean(PulsarClientConfiguration.class)
-							.extracting("configs", InstanceOfAssertFactories.map(String.class, Object.class))
-							.doesNotContainKey("authParamMap").doesNotContainKey("userId").doesNotContainKey("password")
-							.containsEntry("authParams", "{\"password\":\"topsecret\",\"userId\":\"username\"}")));
+					.run(context -> assertThat(context).hasNotFailed().getBean(ClientBuilder.class)
+						.extracting("conf", InstanceOfAssertFactories.type(ClientConfigurationData.class))
+						.extracting(ClientConfigurationData::getAuthentication, InstanceOfAssertFactories.type(AuthenticationBasic.class))
+						.hasFieldOrPropertyWithValue("userId", "username")
+						.hasFieldOrPropertyWithValue("password", "topsecret"));
 		}
 
 	}

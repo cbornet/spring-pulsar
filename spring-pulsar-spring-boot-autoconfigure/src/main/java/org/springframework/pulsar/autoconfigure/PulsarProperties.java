@@ -22,15 +22,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import org.apache.pulsar.client.api.ClientBuilder;
 import org.apache.pulsar.client.api.CompressionType;
 import org.apache.pulsar.client.api.ConsumerCryptoFailureAction;
 import org.apache.pulsar.client.api.HashingScheme;
 import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.ProducerAccessMode;
 import org.apache.pulsar.client.api.ProducerCryptoFailureAction;
+import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.RegexSubscriptionMode;
+import org.apache.pulsar.client.api.SizeUnit;
 import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.common.schema.SchemaType;
@@ -95,8 +100,8 @@ public class PulsarProperties {
 		return new HashMap<>(this.consumer.buildProperties());
 	}
 
-	public Map<String, Object> buildClientProperties() {
-		return new HashMap<>(this.client.buildProperties());
+	public ClientBuilder buildClientBuilder() throws PulsarClientException {
+		return this.client.buildClientBuilder();
 	}
 
 	public Map<String, Object> buildProducerProperties() {
@@ -759,7 +764,7 @@ public class PulsarProperties {
 		/**
 		 * Pulsar cluster URL to connect to a broker.
 		 */
-		private String serviceUrl;
+		private String serviceUrl = "pulsar://localhost:6650";
 
 		/**
 		 * Listener name for lookup. Clients can use listenerName to choose one of the
@@ -954,7 +959,7 @@ public class PulsarProperties {
 		/**
 		 * SOCKS5 proxy address.
 		 */
-		private String socks5ProxyAddress;
+		private InetSocketAddress socks5ProxyAddress;
 
 		/**
 		 * SOCKS5 proxy username.
@@ -1254,11 +1259,11 @@ public class PulsarProperties {
 			this.dnsLookupBindPort = dnsLookupBindPort;
 		}
 
-		public String getSocks5ProxyAddress() {
+		public InetSocketAddress getSocks5ProxyAddress() {
 			return this.socks5ProxyAddress;
 		}
 
-		public void setSocks5ProxyAddress(String socks5ProxyAddress) {
+		public void setSocks5ProxyAddress(InetSocketAddress socks5ProxyAddress) {
 			this.socks5ProxyAddress = socks5ProxyAddress;
 		}
 
@@ -1278,62 +1283,87 @@ public class PulsarProperties {
 			this.socks5ProxyPassword = socks5ProxyPassword;
 		}
 
-		public Map<String, Object> buildProperties() {
+		@SuppressWarnings("deprecation")
+		public ClientBuilder buildClientBuilder() throws PulsarClientException {
 			if (StringUtils.hasText(this.getAuthParams()) && !CollectionUtils.isEmpty(this.getAuthentication())) {
 				throw new IllegalArgumentException(
 						"Cannot set both spring.pulsar.client.authParams and spring.pulsar.client.authentication.*");
 			}
 
-			PulsarProperties.Properties properties = new Properties();
+			ClientBuilder builder = PulsarClient.builder();
 
 			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
 
-			map.from(this::getServiceUrl).to(properties.in("serviceUrl"));
-			map.from(this::getListenerName).to(properties.in("listenerName"));
-			map.from(this::getAuthPluginClassName).to(properties.in("authPluginClassName"));
-			map.from(this::getAuthParams).to(properties.in("authParams"));
-			map.from(this::getAuthentication).as(AuthParameterUtils::maybeConvertToEncodedParamString)
-					.to(properties.in("authParams"));
-			map.from(this::getOperationTimeout).as(Duration::toMillis).to(properties.in("operationTimeoutMs"));
-			map.from(this::getLookupTimeout).as(Duration::toMillis).to(properties.in("lookupTimeoutMs"));
-			map.from(this::getNumIoThreads).to(properties.in("numIoThreads"));
-			map.from(this::getNumListenerThreads).to(properties.in("numListenerThreads"));
-			map.from(this::getNumConnectionsPerBroker).to(properties.in("connectionsPerBroker"));
-			map.from(this::isUseTcpNoDelay).to(properties.in("useTcpNoDelay"));
-			map.from(this::isUseTls).to(properties.in("useTls"));
-			map.from(this::isTlsHostnameVerificationEnable).to(properties.in("tlsHostnameVerificationEnable"));
-			map.from(this::getTlsTrustCertsFilePath).to(properties.in("tlsTrustCertsFilePath"));
-			map.from(this::isTlsAllowInsecureConnection).to(properties.in("tlsAllowInsecureConnection"));
-			map.from(this::isUseKeyStoreTls).to(properties.in("useKeyStoreTls"));
-			map.from(this::getSslProvider).to(properties.in("sslProvider"));
-			map.from(this::getTlsTrustStoreType).to(properties.in("tlsTrustStoreType"));
-			map.from(this::getTlsTrustStorePath).to(properties.in("tlsTrustStorePath"));
-			map.from(this::getTlsTrustStorePassword).to(properties.in("tlsTrustStorePassword"));
-			map.from(this::getTlsCiphers).to(properties.in("tlsCiphers"));
-			map.from(this::getTlsProtocols).to(properties.in("tlsProtocols"));
-			map.from(this::getStatsInterval).as(Duration::toSeconds).to(properties.in("statsIntervalSeconds"));
-			map.from(this::getMaxConcurrentLookupRequest).to(properties.in("concurrentLookupRequest"));
-			map.from(this::getMaxLookupRequest).to(properties.in("maxLookupRequest"));
-			map.from(this::getMaxLookupRedirects).to(properties.in("maxLookupRedirects"));
+			map.from(this::getServiceUrl).to(builder::serviceUrl);
+			map.from(this::getListenerName).to(builder::listenerName);
+			if (this.authPluginClassName != null) {
+				if (StringUtils.hasText(this.getAuthParams())) {
+					builder.authentication(this.authPluginClassName, this.getAuthParams());
+				} else if (!CollectionUtils.isEmpty(this.getAuthentication())) {
+					builder.authentication(this.authPluginClassName, this.getAuthentication());
+				}
+			}
+			map.from(this::getOperationTimeout).to(it -> builder.operationTimeout((int) it.toMillis(), TimeUnit.MILLISECONDS));
+			map.from(this::getLookupTimeout).to(it -> builder.lookupTimeout((int) it.toMillis(), TimeUnit.MILLISECONDS));
+			map.from(this::getNumIoThreads).to(builder::ioThreads);
+			map.from(this::getNumListenerThreads).to(builder::listenerThreads);
+			map.from(this::getNumConnectionsPerBroker).to(builder::connectionsPerBroker);
+			map.from(this::isUseTcpNoDelay).to(builder::enableTcpNoDelay);
+			map.from(this::isUseTls).to(builder::enableTls);
+			map.from(this::isTlsHostnameVerificationEnable).to(builder::enableTlsHostnameVerification);
+			map.from(this::getTlsTrustCertsFilePath).to(builder::tlsTrustCertsFilePath);
+			map.from(this::isTlsAllowInsecureConnection).to(builder::allowTlsInsecureConnection);
+			map.from(this::isUseKeyStoreTls).to(builder::useKeyStoreTls);
+			map.from(this::getSslProvider).to(builder::sslProvider);
+			map.from(this::getTlsTrustStoreType).to(builder::tlsTrustStoreType);
+			map.from(this::getTlsTrustStorePath).to(builder::tlsTrustStorePath);
+			map.from(this::getTlsTrustStorePassword).to(builder::tlsTrustStorePassword);
+			map.from(this::getTlsCiphers).to(builder::tlsCiphers);
+			map.from(this::getTlsProtocols).to(builder::tlsProtocols);
+			map.from(this::getStatsInterval).to(it -> builder.statsInterval(it.toSeconds(), TimeUnit.SECONDS));
+			map.from(this::getMaxConcurrentLookupRequest).to(builder::maxConcurrentLookupRequests);
+			map.from(this::getMaxLookupRequest).to(builder::maxLookupRequests);
+			map.from(this::getMaxLookupRedirects).to(builder::maxLookupRedirects);
 			map.from(this::getMaxNumberOfRejectedRequestPerConnection)
-					.to(properties.in("maxNumberOfRejectedRequestPerConnection"));
-			map.from(this::getKeepAliveInterval).as(Duration::toSeconds).to(properties.in("keepAliveIntervalSeconds"));
-			map.from(this::getConnectionTimeout).as(Duration::toMillis).to(properties.in("connectionTimeoutMs"));
-			map.from(this::getInitialBackoffInterval).as(Duration::toNanos)
-					.to(properties.in("initialBackoffIntervalNanos"));
-			map.from(this::getMaxBackoffInterval).as(Duration::toNanos).to(properties.in("maxBackoffIntervalNanos"));
-			map.from(this::isEnableBusyWait).to(properties.in("enableBusyWait"));
-			map.from(this::getMemoryLimit).as(DataSize::toBytes).to(properties.in("memoryLimitBytes"));
-			map.from(this::isEnableTransaction).to(properties.in("enableTransaction"));
-			map.from(this::getDnsLookupBindAddress).to(properties.in("dnsLookupBindAddress"));
-			map.from(this::getDnsLookupBindPort).to(properties.in("dnsLookupBindPort"));
-			map.from(this::getSocks5ProxyAddress).to(properties.in("socks5ProxyAddress"));
-			map.from(this::getSocks5ProxyUsername).to(properties.in("socks5ProxyUsername"));
-			map.from(this::getSocks5ProxyPassword).to(properties.in("socks5ProxyPassword"));
+					.to(builder::maxNumberOfRejectedRequestPerConnection);
+			map.from(this::getKeepAliveInterval).to(it -> builder.keepAliveInterval((int) it.toSeconds(), TimeUnit.SECONDS));
+			map.from(this::getConnectionTimeout).to(it -> builder.connectionTimeout((int) it.toMillis(), TimeUnit.MILLISECONDS));
+			map.from(this::getInitialBackoffInterval).to(it -> builder.startingBackoffInterval(it.toNanos(), TimeUnit.NANOSECONDS));
+			map.from(this::getMaxBackoffInterval).to(it -> builder.maxBackoffInterval(it.toNanos(), TimeUnit.NANOSECONDS));
+			map.from(this::isEnableBusyWait).to(builder::enableBusyWait);
+			map.from(this::getMemoryLimit).to(it -> builder.memoryLimit(it.toBytes(), SizeUnit.BYTES));
+			map.from(this::isEnableTransaction).to(builder::enableTransaction);
+			if (this.getDnsLookupBindAddress() != null || this.getDnsLookupBindPort() != null) {
+				builder.dnsLookupBind(this.getDnsLookupBindAddress(), this.getDnsLookupBindPort());
+			}
+			map.from(this::getSocks5ProxyAddress).as(it -> new java.net.InetSocketAddress(it.getHostname(), it.getPort())).to(builder::socks5ProxyAddress);
+			map.from(this::getSocks5ProxyUsername).to(builder::socks5ProxyUsername);
+			map.from(this::getSocks5ProxyPassword).to(builder::socks5ProxyPassword);
 
-			return properties;
+			return builder;
 		}
 
+	}
+
+	public static class InetSocketAddress {
+		private String hostname;
+		private Integer port;
+
+		public String getHostname() {
+			return hostname;
+		}
+
+		public void setHostname(String hostname) {
+			this.hostname = hostname;
+		}
+
+		public Integer getPort() {
+			return port;
+		}
+
+		public void setPort(Integer port) {
+			this.port = port;
+		}
 	}
 
 	public static class Listener {

@@ -17,7 +17,6 @@
 package org.springframework.pulsar.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -286,15 +285,6 @@ class PulsarTemplateTests implements PulsarTestContainerSupport {
 		PulsarProducerFactory<String> senderFactory = new DefaultPulsarProducerFactory<>(client, config);
 		PulsarTemplate<String> pulsarTemplate = new PulsarTemplate<>(senderFactory);
 		assertThatIllegalArgumentException().isThrownBy(() -> pulsarTemplate.send(null, Schema.STRING));
-	}
-
-	@Test
-	void sendWithoutSchemaFails() {
-		PulsarProducerFactory<Foo> senderFactory = new DefaultPulsarProducerFactory<>(client, new HashMap<>());
-		PulsarTemplate<Foo> pulsarTemplate = new PulsarTemplate<>(senderFactory);
-		// Defaulting to Schema.JSON would prevent this from failing
-		assertThatExceptionOfType(ClassCastException.class)
-				.isThrownBy(() -> pulsarTemplate.send("sendWithoutSchemaFails", new Foo("foo", "bar")));
 	}
 
 	private <T> Message<T> sendAndConsume(ThrowingConsumer<PulsarTemplate<T>> sendFunction, String topic,

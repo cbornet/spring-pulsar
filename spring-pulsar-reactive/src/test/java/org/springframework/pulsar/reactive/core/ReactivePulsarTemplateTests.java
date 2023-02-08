@@ -22,6 +22,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -47,7 +48,6 @@ import org.springframework.pulsar.test.support.PulsarTestContainerSupport;
 import org.springframework.util.function.ThrowingConsumer;
 
 import reactor.core.publisher.Flux;
-import reactor.test.StepVerifier;
 
 /**
  * Tests for {@link ReactivePulsarTemplate}.
@@ -162,6 +162,24 @@ class ReactivePulsarTemplateTests implements PulsarTestContainerSupport {
 	}
 
 	@Test
+	void sendNonPrimitiveMessageWithSpecifiedSchema() throws Exception {
+		String topic = "ptt-specificSchema-topic";
+		Foo foo = new Foo("Foo-" + UUID.randomUUID(), "Bar-" + UUID.randomUUID());
+		ThrowingConsumer<ReactivePulsarTemplate<Foo>> sendFunction = (template) -> template
+				.send(Flux.just(MessageSpec.of(foo)), Schema.AVRO(Foo.class)).blockLast();
+		sendAndConsume(sendFunction, topic, Schema.AVRO(Foo.class), foo, true);
+	}
+
+	@Test
+	void sendNonPrimitiveMessageWithInferredSchema() throws Exception {
+		String topic = "ptt-nospecificSchema-topic";
+		Foo foo = new Foo("Foo-" + UUID.randomUUID(), "Bar-" + UUID.randomUUID());
+		ThrowingConsumer<ReactivePulsarTemplate<Foo>> sendFunction = (template) -> template
+				.send(Flux.just(MessageSpec.of(foo))).subscribe();
+		sendAndConsume(sendFunction, topic, Schema.JSON(Foo.class), foo, true);
+	}
+
+	@Test
 	void sendMessageWithCustomTopicMapping() throws Exception {
 		String topic = "sendMessageWithCustomTopicMapping";
 
@@ -223,16 +241,6 @@ class ReactivePulsarTemplateTests implements PulsarTestContainerSupport {
 		assertThatIllegalArgumentException().isThrownBy(() -> pulsarTemplate.send((String) null, Schema.STRING));
 	}
 
-	@Test
-	void sendWithoutSchemaFails() {
-		ReactivePulsarSenderFactory<Foo> senderFactory = new DefaultReactivePulsarSenderFactory<>(client,
-				new MutableReactiveMessageSenderSpec(), null);
-		ReactivePulsarTemplate<Foo> pulsarTemplate = new ReactivePulsarTemplate<>(senderFactory);
-		// Defaulting to Schema.JSON would prevent this from failing
-		StepVerifier.create(pulsarTemplate.send("sendWithoutSchemaFails", new Foo("foo", "bar")))
-				.verifyError(ClassCastException.class);
-	}
-
 	private <T> Message<T> sendAndConsume(Consumer<ReactivePulsarTemplate<T>> sendFunction, String topic,
 			Schema<T> schema, T expectedValue, Boolean withDefaultTopic) throws Exception {
 		MutableReactiveMessageSenderSpec senderSpec = new MutableReactiveMessageSenderSpec();
@@ -254,14 +262,60 @@ class ReactivePulsarTemplateTests implements PulsarTestContainerSupport {
 				.subscriptionName(topic + "-sub").subscribe()) {
 			sendFunction.accept(template);
 
-			Message<T> msg = consumer.receive(3, TimeUnit.SECONDS);
+			Message<T> msg = consumer.receive(30, TimeUnit.SECONDS);
 			assertThat(msg).isNotNull();
 			assertThat(msg.getValue()).isEqualTo(expectedValue);
 			return msg;
 		}
 	}
 
-	record Foo(String foo, String bar) {
+	public static class Foo {
+
+		private String foo;
+
+		private String bar;
+
+		Foo() {
+		}
+
+		Foo(String foo, String bar) {
+			this.foo = foo;
+			this.bar = bar;
+		}
+
+		public String getFoo() {
+			return foo;
+		}
+
+		public void setFoo(String foo) {
+			this.foo = foo;
+		}
+
+		public String getBar() {
+			return bar;
+		}
+
+		public void setBar(String bar) {
+			this.bar = bar;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) {
+				return true;
+			}
+			if (o == null || getClass() != o.getClass()) {
+				return false;
+			}
+			Foo foo1 = (Foo) o;
+			return foo.equals(foo1.foo) && bar.equals(foo1.bar);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(foo, bar);
+		}
+
 	}
 
 }
